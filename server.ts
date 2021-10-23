@@ -80,8 +80,6 @@ async function handleRequest(request: Request): Promise<Response> {
                     client.name = data.split(":")[1]// the second value of split-array
                     if (DEBUG) console.log(`${client.name} >> has joined the chat!`)
                     broadcast(`${client.name} >> has joined the chat!`);
-                } else if (data === 'ACK') { // watchdog acknowledged
-                    client.isAlive = true
                 } else {
                     if (DEBUG) console.log(`${client.name} >> ${msg.data}`)
                     broadcast(`${client.name} >> ${msg.data}`)
@@ -100,6 +98,7 @@ async function handleRequest(request: Request): Promise<Response> {
         }
 
         return response
+        
     } else { // not a webSocket request just load our html
         return await handleStaticFile()
     }

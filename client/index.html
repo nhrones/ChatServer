@@ -49,12 +49,6 @@ ${what}`
             socket = new WebSocket(sockURL)
             socket.onopen = () => handleConnected(socket)
             socket.onmessage = (msg) => {
-                // watchdog timer from host
-                if(msg.data === 'OK?') {
-                    console.log('OK?')
-                    sendIt(socket, {value:'ACK'}) // say yes!
-                    return
-                }
                 log(msg.data)
             }
             socket.onclose = () => log("Disconnected from server ...")

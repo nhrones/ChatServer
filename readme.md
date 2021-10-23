@@ -1,3 +1,3 @@
 ## Deno Deploy WebSocket example
 
-https://chat-server.deno.dev/
+https://github.com/nhrones/ChatServer/blob/master/client/index.html

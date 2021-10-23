@@ -1,45 +1,69 @@
+const {
+    listen,
+    serveHttp,
+    readFile,
+    upgradeWebSocket,
+    env
+} = Deno
+type Conn = Deno.Conn
 
-const channel = new BroadcastChannel("chat");
-
-channel.onmessage = (e: MessageEvent) => {
-    for (const client of webSockets.values()) {
-        client.socket.send(e.data)
-    }
-}
-
+/** WebSocket Client */
 type Client = {
     id: string
     name: string
     isAlive: boolean
     socket: WebSocket
 }
+// our inter-isolate message-bus
+const chatChannel = new BroadcastChannel("chat");
+
+// message from another isolate! relay to all socket clients
+chatChannel.onmessage = (e: MessageEvent) => {
+    for (const client of webSockets.values()) {
+        client.socket.send(e.data)
+    }
+}
 
 /** connected socket clients mapped by unique id */
 const webSockets = new Map<string, Client>()
 
-function broadcast(msg: string) {
-    webSockets.forEach(client => {
-        client.socket.send(msg);
-    })
-    channel.postMessage(msg)
+/** Deploy Environment */
+const DEBUG = (env.get("DEBUG") === "true")
+
+/** load an index.html file (clients) */
+async function handleStaticFile() {
+    try {
+        const path = "./index.html"
+        const body = await readFile(path)
+        const headers = new Headers()
+        headers.set("content-type", "text/html")
+        return new Response(body, { status: 200, headers })
+    } catch (e) {
+        console.error(e.message)
+        return Promise.resolve(new Response("Internal server error", { status: 500 }))
+    }
 }
 
-/** Deploy Environment */
-const DEV: boolean = (Deno.env.get("DEV") === "true")
-const DEBUG = (Deno.env.get("DEBUG") === "true")
-if (DEBUG) console.log(`Env DEV: ${DEV}, DEBUG: ${DEBUG} DEPLOYMENT_ID: ${Deno.env.get("DENO_DEPLOYMENT_ID")}`)
+const listener = listen({ port: 8080 });
+console.log("listening on http://localhost:8080")
 
+for await (const conn of listener) {
+    handleConnection(conn)
+}
 
-function handleRequest(request: Request) {
-    console.info(request.url)
-    const upgrade = request.headers.get("upgrade") || "";
-    if (upgrade.toLowerCase() === "websocket") {
+/** Handle each new connection */
+async function handleConnection(conn: Conn) {
+    const httpConn = serveHttp(conn);
+    for await (const requestEvent of httpConn) {
+        await requestEvent.respondWith(handleRequest(requestEvent.request));
+    }
+}
 
+/** handle each new http request */
+async function handleRequest(request: Request): Promise<Response> {
 
-        const ip = request.headers.get("x-forwarded-for");
-        console.log("new websocket connection from", ip);
-
-        const { socket, response } = Deno.upgradeWebSocket(request);
+    if (request.headers.get("upgrade") === "websocket") {
+        const { socket, response } = upgradeWebSocket(request);
         const client: Client = { id: '', name: '', isAlive: true, socket: socket }
         socket.onopen = () => {
             client.id = request.headers.get('sec-websocket-key') || ""
@@ -57,7 +81,6 @@ function handleRequest(request: Request) {
                     if (DEBUG) console.log(`${client.name} >> has joined the chat!`)
                     broadcast(`${client.name} >> has joined the chat!`);
                 } else if (data === 'ACK') { // watchdog acknowledged
-                    if (DEV) console.log(`Recieved watchdog 'ACK' from ${client.name}`)
                     client.isAlive = true
                 } else {
                     if (DEBUG) console.log(`${client.name} >> ${msg.data}`)
@@ -75,16 +98,18 @@ function handleRequest(request: Request) {
         socket.onerror = (err: Event | ErrorEvent) => {
             console.log(err instanceof ErrorEvent ? err.message : err.type)
         }
-        return response;
-    } else {
-        // just swallow non-socket requests
-        const msg = `failed to accept websocket for url ${request.url}`
-        console.error(msg);
-        return new Response(msg)
+
+        return response
+    } else { // not a webSocket request just load our html
+        return await handleStaticFile()
     }
 }
 
-//@ts-ignore ?
-addEventListener("fetch", (event: FetchEvent) => {
-    event.respondWith(handleRequest(event.request));
-});
+
+/** broadcasts a message to every registered user on all isolates */
+function broadcast(msg: string): void {
+    for (const client of webSockets.values()) {
+        client.socket.send(msg)
+    }
+    chatChannel.postMessage(msg)
+}

@@ -28,7 +28,7 @@
         const sendBtn = document.getElementById('send')
         sendBtn.addEventListener('click', (e) => {
             sendIt(socket, msg)
-        }) 
+        })
         const logger = document.getElementById('logger')
         logger.textContent = ""
         const log = (what) => {
@@ -45,7 +45,7 @@ ${what}`
         }
 
         try {
-            const sockURL = `wss://chat-server.deno.dev/` 
+            const sockURL = `wss://chat-server.deno.dev/`
             socket = new WebSocket(sockURL)
             socket.onopen = () => handleConnected(socket)
             socket.onmessage = (msg) => {
@@ -58,13 +58,13 @@ ${what}`
             log(err.message)
         }
     })
-    
+
     function sendIt(ws, msg) {
         if (msg.value.length > 0) {
             ws.send(msg.value)
             msg.value = ""
         }
-    }     
+    }
 </script>
 
 </html>
